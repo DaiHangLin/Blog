@@ -521,10 +521,8 @@ pre.line-numbers > code {
 <div><pre class="line-numbers"><code class="language-java">public class TestImageGetter extends Activity {
     
 private TextView tv;
-private static final String url1 
-= &quot;https://ss1.bdstatic.com/kvoZeXSm1A5BphGlnYG/newmusic/jingdianlaoge.png&quot;;
-private static final String url2 
-= &quot;https://ss0.bdstatic.com/k4oZeXSm1A5BphGlnYG/newmusic/lovesong.png&quot;;
+private static final String url1 = &quot;https://ss1.bdstatic.com/kvoZeXSm1A5BphGlnYG/newmusic/jingdianlaoge.png&quot;;
+private static final String url2 = &quot;https://ss0.bdstatic.com/k4oZeXSm1A5BphGlnYG/newmusic/lovesong.png&quot;;
     
 @Override
 protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -569,14 +567,193 @@ class MyImageGetter implements Html.ImageGetter {
 <p><img src="../image/imagegetter_result1.png" alt=""></p></li>
 </ul>
 
+<h1 id="toc_3">4. 加载网络图片</h1>
+
+<p>选择目前android上加载图片比较好的框架：<a href="https://github.com/bumptech/glide">Glide</a></p>
+
+<h2 id="toc_4">step1: 添加网络访问权限</h2>
+
+<div><pre class="line-numbers"><code class="language-markup">    &lt;uses-permission android:name=&quot;android.permission.INTERNET&quot;&gt;&lt;/uses-permission&gt;</code></pre></div>
+
+<h2 id="toc_5">step2: 添加类库</h2>
+
+<div><pre class="line-numbers"><code class="language-java">   //project的build.gradle
+   allprojects {
+      repositories {
+        jcenter()
+        maven { url &#39;https://maven.google.com&#39; }
+      }
+   }
+   //module的build.gradle
+   dependencies {
+      compile &#39;com.github.bumptech.glide:glide:4.2.0&#39;
+   }</code></pre></div>
+
+<h2 id="toc_6">step3: 修改ImageGetter中getDrawable的实现方式</h2>
+
+<ul>
+<li><p>step3.1 自定义Drawable，因为ImageGetter接口返回的Drawable是不可变的，但是在加载网络图片完成后需要更新图片，因此在Drawable外加一个Wrapper</p>
+
+<div><pre class="line-numbers"><code class="language-java">    //查看ImageGetter接口
+    //public static interface ImageGetter {           
+    //    public Drawable getDrawable(String source);
+    //}
+    //实现DrawableWrapper
+    class MyDrawableWrapper extends BitmapDrawable {
+        private Drawable drawable;
+
+        MyDrawableWrapper() {
+
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            if (drawable != null)
+                drawable.draw(canvas);
+        }
+
+        public Drawable getDrawable() {
+            return drawable;
+        }
+        public void setDrawable(Drawable drawable) {
+            this.drawable = drawable;
+        }
+    }</code></pre></div></li>
+<li><p>step3.2 利用Glide加载网络图片</p>
+
+<div><pre class="line-numbers"><code class="language-java">class MyImageGetter implements Html.ImageGetter {
+
+    @Override
+    public Drawable getDrawable(String source) {
+        MyDrawableWrapper myDrawable = new MyDrawableWrapper();
+        Drawable drawable = getResources().getDrawable(R.mipmap.ic_launcher);
+        drawable.setBounds(
+                0, 
+                0, 
+                drawable.getIntrinsicWidth(),
+                drawable.getIntrinsicHeight());
+        myDrawable.setDrawable(drawable);
+        Glide.with(TestImageGetter.this)
+                .asBitmap()
+                .load(source)
+                .into(new BitmapTarget(myDrawable));
+        return myDrawable;
+    }
+}
+
+class BitmapTarget extends SimpleTarget&lt;Bitmap&gt; {
+    private final MyDrawableWrapper myDrawable;
+    public BitmapTarget(MyDrawableWrapper myDrawable) {
+        this.myDrawable = myDrawable;
+    }
+    @Override
+    public void onResourceReady(Bitmap resource, Transition&lt;? super Bitmap&gt; transition) {
+        Drawable drawable = new BitmapDrawable(getResources(), resource);
+        //获取原图大小
+        int width=drawable.getIntrinsicWidth() ;
+        int height=drawable.getIntrinsicHeight();
+        //自定义drawable的高宽, 缩放图片大小最好用matrix变化，可以保证图片不失真
+        drawable.setBounds(0, 0, 500, 500);
+        myDrawable.setBounds(0, 0, 500, 500);
+        myDrawable.setDrawable(drawable);
+        tv.setText(tv.getText());
+        tv.invalidate();
+    }
+}</code></pre></div></li>
+<li><p>step4 查看运行结果<br>
+<img src="../image/imagegetter_result2.png" alt=""></p></li>
+</ul>
+
+<h1 id="toc_7">5. 响应点击事件</h1>
+
+<blockquote>
+<p>假设有个需求需要点击图片后能够全屏查看，最简单的方法就是跳转到新的activity，因此就需要响应每个图片的点击事件</p>
+</blockquote>
+
+<p>关键思路</p>
+
+<div><pre class="line-numbers"><code class="language-none">1. activity利用action去响应html的文本的点击事件即隐式启动activity
+2. 自定义html文本的规则，给每个需要添加
+ “ &lt;a href = &quot;ACTION_STRING://?source=DATA&quot;&gt;&lt;img/&gt;(或者其他的标签)&lt;/a&gt;”
+3. ACTION_STRING 为自定义需要响应的action
+4. source = DATA 为向另一个activity传递的数据</code></pre></div>
+
+<h2 id="toc_8">5.1 如何响应image的点击事件</h2>
+
+<blockquote>
+<p>因为整体为一个textView，因此给textView设置点击事件是不实际的，所以需要寻找另外的解决方案</p>
+</blockquote>
+
+<ul>
+<li><p>方案一 ： 得到imageSpans 给每个imageSpans设置点击事件，但是这样只能处理图片</p>
+
+<div><pre class="line-numbers"><code class="language-none">Spanned spanned = Html.fromHtml();
+SpannableStringBuilder spannableStringBuilder = new SpannableStringBuilder(spanned)
+ImageSpan[] imageSpans = spannableStringBuilder.getSpans(0, spannableStringBuilder.length(), ImageSpan.class);</code></pre></div></li>
+<li><p>方案二 ： 在富文本上添加<q>&lt;a href =</q>href<q>&gt;</a></q>的标签，点击后会发生一个action，activity根据Intent-filter来响应action，</p></li>
+</ul>
+
+<h2 id="toc_9">5.2 activity去响应action</h2>
+
+<ul>
+<li>step1 新建ImageActivity，跳转后的activity，全屏查看大图，并且设置需要响应的自定义action</li>
+</ul>
+
+<div><pre class="line-numbers"><code class="language-markup">&lt;activity android:name=&quot;.ImageActivity&quot;&gt;
+    &lt;intent-filter&gt;
+        &lt;category android:name=&quot;android.intent.category.DEFAULT&quot; /&gt;
+        &lt;action android:name=&quot;android.intent.action.VIEW&quot; /&gt;
+        &lt;data android:scheme=&quot;com.lin.action.custom.image&quot; /&gt;
+    &lt;/intent-filter&gt;
+&lt;/activity&gt;</code></pre></div>
+
+<ul>
+<li>step2 修改TestImageGetterActivity的代码，添加响应事件，需要修改的只有 html富文本罢了</li>
+</ul>
+
+<div><pre class="line-numbers"><code class="language-java">private TextView tv;
+private static final String url1 = &quot;https://ss1.bdstatic.com/kvoZeXSm1A5BphGlnYG/newmusic/jingdianlaoge.png&quot;;
+private static final String url2 = &quot;https://ss0.bdstatic.com/k4oZeXSm1A5BphGlnYG/newmusic/lovesong.png&quot;;
+    // 添加需要响应的 action  
+private static final String ACTION_IMAGE = &quot;com.lin.action.custom.image&quot;;
+
+@Override
+protected void onCreate(@Nullable Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.act_tv_demo);
+    tv = (TextView) findViewById(R.id.tv);
+    
+    // 在每个html的image标签 或者说 需要添加点击响应事件的文本添加
+    // &lt;a href =&quot;ACTION_STRING://?source=data&quot;&gt;
+    String source = &quot;this is a test of &lt;b&gt;ImageGetter&lt;/b&gt; it contains &quot; +
+            &quot;two images: &lt;br/&gt;&quot; +
+            &quot;&lt;a href=\&quot;&quot; + ACTION_IMAGE + &quot;://?source=&quot; + url1 + &quot;\&quot;&gt;&quot; +
+            &quot;&lt;img src=\&quot;&quot; + url1 + &quot;\&quot;&gt;&lt;/a&gt;&quot; +
+            &quot;&lt;br/&gt;and&lt;br/&gt;&quot; +
+            &quot;&lt;a href=\&quot;&quot; + ACTION_IMAGE + &quot;://?source=&quot; + url2 + &quot;\&quot;&gt;&quot; +
+            &quot;&lt;img src=\&quot;&quot; + url2 + &quot;\&quot;&gt;&lt;/a&gt;&quot;;
+    MyImageGetter myImageGetter = new MyImageGetter();
+    tv.setText(Html.fromHtml(source, myImageGetter, null));
+    tv.setMovementMethod(LinkMovementMethod.getInstance());
+}</code></pre></div>
+
+<h1 id="toc_10">6. 查看运行结果</h1>
+
+<p><img src="../image/imagegetter_result3.png" alt=""></p>
+
+<h1 id="toc_11">7. 需要改进</h1>
+
+<ul>
+<li>如何高效的缩放图片 &ndash; 利用matrix</li>
+<li>如何去响应html文本中视频或者音频 &ndash; 同样parse html，生成不同的action，区别处理</li>
+<li>activity是如何响应action的 &ndash; 隐式启动activity，平时选择照片或者打电话都是隐式启动
+具体可以查阅官网</li>
+</ul>
+
 
 
 <script type="text/javascript">
 var _self="undefined"!=typeof window?window:"undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?self:{},Prism=function(){var e=/\blang(?:uage)?-(\w+)\b/i,t=0,n=_self.Prism={util:{encode:function(e){return e instanceof a?new a(e.type,n.util.encode(e.content),e.alias):"Array"===n.util.type(e)?e.map(n.util.encode):e.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\u00a0/g," ")},type:function(e){return Object.prototype.toString.call(e).match(/\[object (\w+)\]/)[1]},objId:function(e){return e.__id||Object.defineProperty(e,"__id",{value:++t}),e.__id},clone:function(e){var t=n.util.type(e);switch(t){case"Object":var a={};for(var r in e)e.hasOwnProperty(r)&&(a[r]=n.util.clone(e[r]));return a;case"Array":return e.map&&e.map(function(e){return n.util.clone(e)})}return e}},languages:{extend:function(e,t){var a=n.util.clone(n.languages[e]);for(var r in t)a[r]=t[r];return a},insertBefore:function(e,t,a,r){r=r||n.languages;var l=r[e];if(2==arguments.length){a=arguments[1];for(var i in a)a.hasOwnProperty(i)&&(l[i]=a[i]);return l}var o={};for(var s in l)if(l.hasOwnProperty(s)){if(s==t)for(var i in a)a.hasOwnProperty(i)&&(o[i]=a[i]);o[s]=l[s]}return n.languages.DFS(n.languages,function(t,n){n===r[e]&&t!=e&&(this[t]=o)}),r[e]=o},DFS:function(e,t,a,r){r=r||{};for(var l in e)e.hasOwnProperty(l)&&(t.call(e,l,e[l],a||l),"Object"!==n.util.type(e[l])||r[n.util.objId(e[l])]?"Array"!==n.util.type(e[l])||r[n.util.objId(e[l])]||(r[n.util.objId(e[l])]=!0,n.languages.DFS(e[l],t,l,r)):(r[n.util.objId(e[l])]=!0,n.languages.DFS(e[l],t,null,r)))}},plugins:{},highlightAll:function(e,t){var a={callback:t,selector:'code[class*="language-"], [class*="language-"] code, code[class*="lang-"], [class*="lang-"] code'};n.hooks.run("before-highlightall",a);for(var r,l=a.elements||document.querySelectorAll(a.selector),i=0;r=l[i++];)n.highlightElement(r,e===!0,a.callback)},highlightElement:function(t,a,r){for(var l,i,o=t;o&&!e.test(o.className);)o=o.parentNode;o&&(l=(o.className.match(e)||[,""])[1],i=n.languages[l]),t.className=t.className.replace(e,"").replace(/\s+/g," ")+" language-"+l,o=t.parentNode,/pre/i.test(o.nodeName)&&(o.className=o.className.replace(e,"").replace(/\s+/g," ")+" language-"+l);var s=t.textContent,u={element:t,language:l,grammar:i,code:s};if(!s||!i)return n.hooks.run("complete",u),void 0;if(n.hooks.run("before-highlight",u),a&&_self.Worker){var c=new Worker(n.filename);c.onmessage=function(e){u.highlightedCode=e.data,n.hooks.run("before-insert",u),u.element.innerHTML=u.highlightedCode,r&&r.call(u.element),n.hooks.run("after-highlight",u),n.hooks.run("complete",u)},c.postMessage(JSON.stringify({language:u.language,code:u.code,immediateClose:!0}))}else u.highlightedCode=n.highlight(u.code,u.grammar,u.language),n.hooks.run("before-insert",u),u.element.innerHTML=u.highlightedCode,r&&r.call(t),n.hooks.run("after-highlight",u),n.hooks.run("complete",u)},highlight:function(e,t,r){var l=n.tokenize(e,t);return a.stringify(n.util.encode(l),r)},tokenize:function(e,t){var a=n.Token,r=[e],l=t.rest;if(l){for(var i in l)t[i]=l[i];delete t.rest}e:for(var i in t)if(t.hasOwnProperty(i)&&t[i]){var o=t[i];o="Array"===n.util.type(o)?o:[o];for(var s=0;s<o.length;++s){var u=o[s],c=u.inside,g=!!u.lookbehind,h=!!u.greedy,f=0,d=u.alias;u=u.pattern||u;for(var p=0;p<r.length;p++){var m=r[p];if(r.length>e.length)break e;if(!(m instanceof a)){u.lastIndex=0;var y=u.exec(m),v=1;if(!y&&h&&p!=r.length-1){var b=r[p+1].matchedStr||r[p+1],k=m+b;if(p<r.length-2&&(k+=r[p+2].matchedStr||r[p+2]),u.lastIndex=0,y=u.exec(k),!y)continue;var w=y.index+(g?y[1].length:0);if(w>=m.length)continue;var _=y.index+y[0].length,P=m.length+b.length;if(v=3,P>=_){if(r[p+1].greedy)continue;v=2,k=k.slice(0,P)}m=k}if(y){g&&(f=y[1].length);var w=y.index+f,y=y[0].slice(f),_=w+y.length,S=m.slice(0,w),O=m.slice(_),j=[p,v];S&&j.push(S);var A=new a(i,c?n.tokenize(y,c):y,d,y,h);j.push(A),O&&j.push(O),Array.prototype.splice.apply(r,j)}}}}}return r},hooks:{all:{},add:function(e,t){var a=n.hooks.all;a[e]=a[e]||[],a[e].push(t)},run:function(e,t){var a=n.hooks.all[e];if(a&&a.length)for(var r,l=0;r=a[l++];)r(t)}}},a=n.Token=function(e,t,n,a,r){this.type=e,this.content=t,this.alias=n,this.matchedStr=a||null,this.greedy=!!r};if(a.stringify=function(e,t,r){if("string"==typeof e)return e;if("Array"===n.util.type(e))return e.map(function(n){return a.stringify(n,t,e)}).join("");var l={type:e.type,content:a.stringify(e.content,t,r),tag:"span",classes:["token",e.type],attributes:{},language:t,parent:r};if("comment"==l.type&&(l.attributes.spellcheck="true"),e.alias){var i="Array"===n.util.type(e.alias)?e.alias:[e.alias];Array.prototype.push.apply(l.classes,i)}n.hooks.run("wrap",l);var o="";for(var s in l.attributes)o+=(o?" ":"")+s+'="'+(l.attributes[s]||"")+'"';return"<"+l.tag+' class="'+l.classes.join(" ")+'" '+o+">"+l.content+"</"+l.tag+">"},!_self.document)return _self.addEventListener?(_self.addEventListener("message",function(e){var t=JSON.parse(e.data),a=t.language,r=t.code,l=t.immediateClose;_self.postMessage(n.highlight(r,n.languages[a],a)),l&&_self.close()},!1),_self.Prism):_self.Prism;var r=document.currentScript||[].slice.call(document.getElementsByTagName("script")).pop();return r&&(n.filename=r.src,document.addEventListener&&!r.hasAttribute("data-manual")&&document.addEventListener("DOMContentLoaded",n.highlightAll)),_self.Prism}();"undefined"!=typeof module&&module.exports&&(module.exports=Prism),"undefined"!=typeof global&&(global.Prism=Prism);
-</script>
-
-<script type="text/javascript">
-Prism.languages.markup={comment:/<!--[\w\W]*?-->/,prolog:/<\?[\w\W]+?\?>/,doctype:/<!DOCTYPE[\w\W]+?>/,cdata:/<!\[CDATA\[[\w\W]*?]]>/i,tag:{pattern:/<\/?(?!\d)[^\s>\/=.$<]+(?:\s+[^\s>\/=]+(?:=(?:("|')(?:\\\1|\\?(?!\1)[\w\W])*\1|[^\s'">=]+))?)*\s*\/?>/i,inside:{tag:{pattern:/^<\/?[^\s>\/]+/i,inside:{punctuation:/^<\/?/,namespace:/^[^\s>\/:]+:/}},"attr-value":{pattern:/=(?:('|")[\w\W]*?(\1)|[^\s>]+)/i,inside:{punctuation:/[=>"']/}},punctuation:/\/?>/,"attr-name":{pattern:/[^\s>\/]+/,inside:{namespace:/^[^\s>\/:]+:/}}}},entity:/&#?[\da-z]{1,8};/i},Prism.hooks.add("wrap",function(a){"entity"===a.type&&(a.attributes.title=a.content.replace(/&amp;/,"&"))}),Prism.languages.xml=Prism.languages.markup,Prism.languages.html=Prism.languages.markup,Prism.languages.mathml=Prism.languages.markup,Prism.languages.svg=Prism.languages.markup;
 </script>
 
 <script type="text/javascript">
@@ -585,6 +762,10 @@ Prism.languages.clike={comment:[{pattern:/(^|[^\\])\/\*[\w\W]*?\*\//,lookbehind:
 
 <script type="text/javascript">
 Prism.languages.java=Prism.languages.extend("clike",{keyword:/\b(abstract|continue|for|new|switch|assert|default|goto|package|synchronized|boolean|do|if|private|this|break|double|implements|protected|throw|byte|else|import|public|throws|case|enum|instanceof|return|transient|catch|extends|int|short|try|char|final|interface|static|void|class|finally|long|strictfp|volatile|const|float|native|super|while)\b/,number:/\b0b[01]+\b|\b0x[\da-f]*\.?[\da-fp\-]+\b|\b\d*\.?\d+(?:e[+-]?\d+)?[df]?\b/i,operator:{pattern:/(^|[^.])(?:\+[+=]?|-[-=]?|!=?|<<?=?|>>?>?=?|==?|&[&=]?|\|[|=]?|\*=?|\/=?|%=?|\^=?|[?:~])/m,lookbehind:!0}}),Prism.languages.insertBefore("java","function",{annotation:{alias:"punctuation",pattern:/(^|[^.])@\w+/,lookbehind:!0}});
+</script>
+
+<script type="text/javascript">
+Prism.languages.markup={comment:/<!--[\w\W]*?-->/,prolog:/<\?[\w\W]+?\?>/,doctype:/<!DOCTYPE[\w\W]+?>/,cdata:/<!\[CDATA\[[\w\W]*?]]>/i,tag:{pattern:/<\/?(?!\d)[^\s>\/=.$<]+(?:\s+[^\s>\/=]+(?:=(?:("|')(?:\\\1|\\?(?!\1)[\w\W])*\1|[^\s'">=]+))?)*\s*\/?>/i,inside:{tag:{pattern:/^<\/?[^\s>\/]+/i,inside:{punctuation:/^<\/?/,namespace:/^[^\s>\/:]+:/}},"attr-value":{pattern:/=(?:('|")[\w\W]*?(\1)|[^\s>]+)/i,inside:{punctuation:/[=>"']/}},punctuation:/\/?>/,"attr-name":{pattern:/[^\s>\/]+/,inside:{namespace:/^[^\s>\/:]+:/}}}},entity:/&#?[\da-z]{1,8};/i},Prism.hooks.add("wrap",function(a){"entity"===a.type&&(a.attributes.title=a.content.replace(/&amp;/,"&"))}),Prism.languages.xml=Prism.languages.markup,Prism.languages.html=Prism.languages.markup,Prism.languages.mathml=Prism.languages.markup,Prism.languages.svg=Prism.languages.markup;
 </script>
 
 <script type="text/javascript">
