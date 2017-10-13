@@ -61,4 +61,6 @@
 		10.1.4 squash   // use commit, but meld into previous commit
 		10.1.5 fixup    // like "squash", but discard this commit's log message
 		10.1.6 exec     // run command (the rest of the line) using shell
-	10.2 //也可以直接删除一条记录 这样的话这条commit就会被删除
+	10.2 //也可以直接删除一条记录  这样的话这条commit就会被删除  
+	
+	
