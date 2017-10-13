@@ -1,8 +1,7 @@
-## 新的博客地址
+## 记录点点滴滴2017-10-10
 
-* ImageGetter简介
-* git记录手册
-
+* [ImageGetter使用记录](https://daihanglin.github.io/Blog/paper/imageGetter.html) (2017-10-10)
+* [git使用记录](https://daihanglin.github.io/Blog/paper/git.html) (2017-10-13)
 
 
 
