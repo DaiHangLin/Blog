@@ -8,7 +8,7 @@
 	 //显示html富文本且包含图片
 	 textView.setText(Html.fromHtml("<b>普通文本</b><img src = "url"></img>", imageGetter, tagHandler))
 # 2. ImageGetter介绍
-  ![](doc/imagegetter.png)
+  ![](../image/imagegetter.png)
   
   ImageGetter是一个接口，主要用于解析 "<img src ="/>"里的src属性，返回drawable，再使用drawable时需要确保drawable里有大小即Bounds
 
@@ -63,4 +63,4 @@ class MyImageGetter implements Html.ImageGetter {
 
 * 运行后结果
 
-  ![](doc/imagegetter_result1.png)
+  ![](../image/imagegetter_result1.png)

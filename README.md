@@ -1,10 +1,6 @@
-## Welcome to GitHub Pages
+## 新的博客地址
 
-
-这个是README.md
-
-
-### Markdown
+* ImageGetter简介
 
 
 
